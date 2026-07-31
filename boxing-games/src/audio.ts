@@ -1,8 +1,6 @@
-/** Lightweight Web Audio beeps — no asset files needed. */
-
 let ctx: AudioContext | null = null;
 
-function getCtx(): AudioContext | null {
+function audio(): AudioContext | null {
   try {
     if (!ctx) ctx = new AudioContext();
     if (ctx.state === "suspended") void ctx.resume();
@@ -12,55 +10,44 @@ function getCtx(): AudioContext | null {
   }
 }
 
-function tone(
-  freq: number,
-  duration: number,
-  type: OscillatorType = "square",
-  gain = 0.08,
-  when = 0,
-): void {
-  const audio = getCtx();
-  if (!audio) return;
-  const t0 = audio.currentTime + when;
-  const osc = audio.createOscillator();
-  const g = audio.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  g.gain.setValueAtTime(gain, t0);
-  g.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-  osc.connect(g);
-  g.connect(audio.destination);
-  osc.start(t0);
-  osc.stop(t0 + duration + 0.02);
+function beep(freq: number, dur = 0.1, type: OscillatorType = "square", gain = 0.07, delay = 0) {
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime + delay;
+  const o = a.createOscillator();
+  const g = a.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g);
+  g.connect(a.destination);
+  o.start(t);
+  o.stop(t + dur + 0.02);
 }
 
-export function unlockAudio(): void {
-  getCtx();
+export function unlockAudio() {
+  audio();
 }
 
-export function sfxHit(): void {
-  tone(180, 0.08, "square", 0.1);
-  tone(320, 0.06, "triangle", 0.06, 0.02);
+export function sfxTick() {
+  beep(880, 0.04, "sine", 0.05);
 }
 
-export function sfxCorrect(): void {
-  tone(440, 0.07, "triangle", 0.08);
-  tone(660, 0.1, "triangle", 0.07, 0.07);
+export function sfxGo() {
+  beep(220, 0.1, "square", 0.09);
+  beep(440, 0.14, "square", 0.08, 0.09);
 }
 
-export function sfxMiss(): void {
-  tone(120, 0.18, "sawtooth", 0.07);
+export function sfxRest() {
+  beep(330, 0.12, "triangle", 0.06);
 }
 
-export function sfxTick(): void {
-  tone(880, 0.04, "sine", 0.05);
+export function sfxShow() {
+  beep(520, 0.09, "triangle", 0.07);
 }
 
-export function sfxGo(): void {
-  tone(220, 0.1, "square", 0.09);
-  tone(440, 0.15, "square", 0.08, 0.1);
-}
-
-export function sfxShow(): void {
-  tone(520, 0.09, "triangle", 0.07);
+export function sfxEnd() {
+  beep(392, 0.12, "triangle", 0.07);
+  beep(523, 0.18, "triangle", 0.07, 0.12);
 }
