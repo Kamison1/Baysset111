@@ -3,71 +3,71 @@ import { formatTime } from "../content";
 import { navigate } from "../router";
 
 type DoseMode = "time" | "reps";
+type Face = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface ExerciseFace {
-  id: string;
+  face: Face;
   name: string;
   detail: string;
   mode: DoseMode;
-  /** Valid doses only — never absurd pairings like 5s plank */
-  doses: number[];
-  why: string;
+  /** Index 0 unused; faces 1–6 each map to one dose */
+  dosesByFace: Record<Face, number>;
 }
 
-/** Amber die — exercise. Each face locks the dose type + allowed values. */
-const EXERCISES: ExerciseFace[] = [
-  {
-    id: "plank",
+/**
+ * Amber die (exercise): face number → fixed exercise.
+ * Red die (dose): face number → dose from that exercise’s chart
+ * (time exercises use seconds; rep exercises use reps).
+ */
+const EXERCISES: Record<Face, ExerciseFace> = {
+  1: {
+    face: 1,
     name: "Plank",
     detail: "Forearm plank. Straight line from head to heels. Breathe.",
     mode: "time",
-    doses: [20, 30, 40, 45, 60, 90],
-    why: "Core holds run on the clock — never under 20 seconds.",
+    dosesByFace: { 1: 20, 2: 30, 3: 40, 4: 45, 5: 60, 6: 90 },
   },
-  {
-    id: "jumprope",
+  2: {
+    face: 2,
     name: "Jump Rope",
     detail: "Easy bounce or basic skips. Soft landings, relaxed shoulders.",
     mode: "time",
-    doses: [30, 45, 60, 75, 90],
-    why: "Cardio rounds need real time to get the heart rate up.",
+    dosesByFace: { 1: 30, 2: 40, 3: 45, 4: 60, 5: 75, 6: 90 },
   },
-  {
-    id: "shadow",
+  3: {
+    face: 3,
     name: "Shadow Boxing",
     detail: "Move and throw: jabs, crosses, hooks. Stay light on your feet.",
     mode: "time",
-    doses: [30, 45, 60, 75, 90],
-    why: "Shadow rounds are timed — like a mini round.",
+    dosesByFace: { 1: 30, 2: 40, 3: 45, 4: 60, 5: 75, 6: 90 },
   },
-  {
-    id: "pushups",
+  4: {
+    face: 4,
     name: "Push-ups",
     detail: "Chest to the floor, full lockout at the top. Clean form.",
     mode: "reps",
-    doses: [8, 10, 12, 15, 20],
-    why: "Strength work is counted in clean reps.",
+    dosesByFace: { 1: 6, 2: 8, 3: 10, 4: 12, 5: 15, 6: 20 },
   },
-  {
-    id: "squats",
+  5: {
+    face: 5,
     name: "Squats",
     detail: "Feet shoulder-width. Sit back, knees track toes, stand tall.",
     mode: "reps",
-    doses: [10, 12, 15, 20, 25],
-    why: "Legs get a clear rep target, not a tiny timer.",
+    dosesByFace: { 1: 8, 2: 10, 3: 12, 4: 15, 5: 20, 6: 25 },
   },
-  {
-    id: "burpees",
+  6: {
+    face: 6,
     name: "Burpees",
     detail: "Down to the floor, chest touches, jump up. That’s one.",
     mode: "reps",
-    doses: [6, 8, 10, 12, 15],
-    why: "Burpees are explosive — count solid reps.",
+    dosesByFace: { 1: 5, 2: 6, 3: 8, 4: 10, 5: 12, 6: 15 },
   },
-];
+};
 
-function pick<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!;
+const FACES: Face[] = [1, 2, 3, 4, 5, 6];
+
+function rollFace(): Face {
+  return FACES[Math.floor(Math.random() * FACES.length)]!;
 }
 
 function formatDose(mode: DoseMode, value: number): string {
@@ -78,10 +78,14 @@ function formatDoseShort(mode: DoseMode, value: number): string {
   return mode === "time" ? `${value}s` : `×${value}`;
 }
 
+function doseChart(ex: ExerciseFace): string {
+  return FACES.map((f) => `${f}→${formatDoseShort(ex.mode, ex.dosesByFace[f])}`).join(" · ");
+}
+
 export function mountDice(root: HTMLElement): () => void {
   let rolling = false;
-  let exercise: ExerciseFace | null = null;
-  let dose = 0;
+  let exerciseFace: Face | null = null;
+  let doseFace: Face | null = null;
   let left = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   const cleanups: Array<() => void> = [];
@@ -91,8 +95,40 @@ export function mountDice(root: HTMLElement): () => void {
     timer = null;
   }
 
-  function paintIdle(result = false) {
-    const has = result && exercise;
+  function current() {
+    if (exerciseFace == null || doseFace == null) return null;
+    const exercise = EXERCISES[exerciseFace];
+    const dose = exercise.dosesByFace[doseFace];
+    return { exercise, dose, exerciseFace, doseFace };
+  }
+
+  function legendHTML() {
+    return `
+      <div class="dice-key">
+        <div class="dice-key__col">
+          <p class="dice-key__title" style="color:var(--spark)">Amber = Exercise</p>
+          <ul>
+            ${FACES.map((f) => {
+              const ex = EXERCISES[f];
+              return `<li><span class="dice-key__n">${f}</span> ${ex.name} <em>(${ex.mode})</em></li>`;
+            }).join("")}
+          </ul>
+        </div>
+        <div class="dice-key__col">
+          <p class="dice-key__title" style="color:var(--glove)">Red = Dose face</p>
+          <p class="dice-key__note">Same number 1–6, but the chart changes with the exercise (time vs reps).</p>
+          ${
+            exerciseFace
+              ? `<p class="dice-key__active">${EXERCISES[exerciseFace].name} chart:<br/><strong>${doseChart(EXERCISES[exerciseFace])}</strong></p>`
+              : `<p class="dice-key__note">Roll first — then you’ll see that exercise’s 1–6 dose chart.</p>`
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  function paintIdle(showResult = false) {
+    const c = showResult ? current() : null;
     root.innerHTML = `
       <div class="screen">
         <div class="topbar">
@@ -101,41 +137,48 @@ export function mountDice(root: HTMLElement): () => void {
           <span></span>
         </div>
         <p class="dice-lead">
-          Two dice for the class: <strong style="color:var(--spark)">amber = exercise</strong>,
-          <strong style="color:var(--glove)">red = dose</strong>.
-          Dose only rolls values that fit the exercise — no 5‑second planks.
+          Each die lands on a <strong>number 1–6</strong>.
+          <strong style="color:var(--spark)">Amber number → exercise</strong>.
+          <strong style="color:var(--glove)">Red number → dose</strong> from that exercise’s chart
+          (so planks get seconds, burpees get reps).
         </p>
         <div class="dice-stage">
           <div class="die die--exercise ${rolling ? "is-rolling" : ""}" data-die="exercise">
-            <span class="die__label">Exercise</span>
-            <span class="die__face">${has ? exercise!.name : "—"}</span>
+            <span class="die__label">Amber</span>
+            <span class="die__num" data-ex-num>${c ? c.exerciseFace : "—"}</span>
+            <span class="die__sub">Exercise</span>
           </div>
           <div class="die die--dose ${rolling ? "is-rolling" : ""}" data-die="dose">
-            <span class="die__label">Dose</span>
-            <span class="die__face">${has ? formatDoseShort(exercise!.mode, dose) : "—"}</span>
-            <span class="die__sub">${has ? (exercise!.mode === "time" ? "TIME" : "REPS") : "fits the move"}</span>
+            <span class="die__label">Red</span>
+            <span class="die__num" data-dose-num>${c ? c.doseFace : "—"}</span>
+            <span class="die__sub">Dose</span>
           </div>
         </div>
         ${
-          has
+          c
             ? `<div class="dice-result">
-                <p class="phase-label">Class does</p>
-                <h2 class="giant-title">${formatDose(exercise!.mode, dose)}</h2>
-                <h3 class="dice-move">${exercise!.name}</h3>
-                <p class="giant-detail">${exercise!.detail}</p>
-                <p class="dice-why">${exercise!.why}</p>
+                <p class="phase-label">Connection</p>
+                <p class="dice-link">
+                  Amber <strong>${c.exerciseFace}</strong> → ${c.exercise.name}
+                  &nbsp;·&nbsp;
+                  Red <strong>${c.doseFace}</strong> → ${formatDose(c.exercise.mode, c.dose)}
+                </p>
+                <h2 class="giant-title">${formatDose(c.exercise.mode, c.dose)}</h2>
+                <h3 class="dice-move">${c.exercise.name}</h3>
+                <p class="giant-detail">${c.exercise.detail}</p>
               </div>`
             : `<div class="dice-result dice-result--empty">
-                <p class="giant-detail">Roll for a finisher, warm-up spike, or team challenge.</p>
+                <p class="giant-detail">Roll — then read the numbers to call it out to the class.</p>
               </div>`
         }
+        ${legendHTML()}
         <div class="coach-bar">
-          <button type="button" class="btn-main" data-roll ${rolling ? "disabled" : ""}>${has ? "Roll Again" : "Roll the Dice"}</button>
+          <button type="button" class="btn-main" data-roll ${rolling ? "disabled" : ""}>${c ? "Roll Again" : "Roll the Dice"}</button>
           ${
-            has
-              ? exercise!.mode === "time"
+            c
+              ? c.exercise.mode === "time"
                 ? `<button type="button" class="btn-soft" data-go>Start Timer</button>`
-                : `<button type="button" class="btn-soft" data-go>Mark Done</button>`
+                : `<button type="button" class="btn-soft" data-go>Got It</button>`
               : ""
           }
           <p class="hint-keys">Space / Enter = roll · Esc = hub</p>
@@ -152,12 +195,10 @@ export function mountDice(root: HTMLElement): () => void {
     });
     root.querySelector("[data-roll]")?.addEventListener("click", () => void roll());
     root.querySelector("[data-go]")?.addEventListener("click", () => {
-      if (!exercise) return;
-      if (exercise.mode === "time") startTimer();
-      else {
-        sfxGo();
-        // quick flash for reps complete / ready
-      }
+      const c = current();
+      if (!c) return;
+      if (c.exercise.mode === "time") startTimer();
+      else sfxGo();
     });
   }
 
@@ -166,13 +207,13 @@ export function mountDice(root: HTMLElement): () => void {
     unlockAudio();
     clearTimer();
     rolling = true;
+    exerciseFace = null;
+    doseFace = null;
     paintIdle(false);
 
-    const exerciseEl = root.querySelector("[data-die='exercise'] .die__face");
-    const doseEl = root.querySelector("[data-die='dose'] .die__face");
-    const doseSub = root.querySelector("[data-die='dose'] .die__sub");
+    const exNum = root.querySelector("[data-ex-num]");
+    const doseNum = root.querySelector("[data-dose-num]");
 
-    // Animate scramble — exercise first drives dose legality
     const scrambleMs = 900;
     const step = 70;
     let t = 0;
@@ -180,11 +221,8 @@ export function mountDice(root: HTMLElement): () => void {
     await new Promise<void>((resolve) => {
       const id = setInterval(() => {
         t += step;
-        const tempEx = pick(EXERCISES);
-        if (exerciseEl) exerciseEl.textContent = tempEx.name;
-        const tempDose = pick(tempEx.doses);
-        if (doseEl) doseEl.textContent = formatDoseShort(tempEx.mode, tempDose);
-        if (doseSub) doseSub.textContent = tempEx.mode === "time" ? "TIME" : "REPS";
+        if (exNum) exNum.textContent = String(rollFace());
+        if (doseNum) doseNum.textContent = String(rollFace());
         if (t >= scrambleMs) {
           clearInterval(id);
           resolve();
@@ -192,29 +230,30 @@ export function mountDice(root: HTMLElement): () => void {
       }, step);
     });
 
-    // Resolve with logic: exercise → allowed dose pool only
-    exercise = pick(EXERCISES);
-    dose = pick(exercise.doses);
+    exerciseFace = rollFace();
+    doseFace = rollFace();
     rolling = false;
     sfxGo();
     paintIdle(true);
   }
 
   function startTimer() {
-    if (!exercise || exercise.mode !== "time") return;
+    const c = current();
+    if (!c || c.exercise.mode !== "time") return;
     unlockAudio();
-    left = dose;
+    left = c.dose;
     sfxGo();
     root.innerHTML = `
       <div class="screen stage">
         <div class="stage__meta">
           <button type="button" class="btn-back" data-back>← Dice</button>
-          <div class="badge"><span class="badge__label">Dice Call</span><span class="badge__value badge__value--hot">Timed</span></div>
+          <div class="badge"><span class="badge__label">Amber ${c.exerciseFace}</span><span class="badge__value">${c.exercise.name}</span></div>
+          <div class="badge"><span class="badge__label">Red ${c.doseFace}</span><span class="badge__value badge__value--hot">${formatDose(c.exercise.mode, c.dose)}</span></div>
         </div>
         <div class="stage__center">
-          <p class="phase-label">${exercise.name}</p>
-          <h2 class="giant-title">${formatDose(exercise.mode, dose)}</h2>
-          <p class="giant-detail">${exercise.detail}</p>
+          <p class="phase-label">${c.exercise.name}</p>
+          <h2 class="giant-title">${formatDose(c.exercise.mode, c.dose)}</h2>
+          <p class="giant-detail">${c.exercise.detail}</p>
           <div class="clock" data-clock>${formatTime(left)}</div>
         </div>
         <div class="coach-bar">
