@@ -38,6 +38,13 @@ export function mountHome(root: HTMLElement): () => void {
             <p class="hub-card__desc">Split the room Red vs Blue. You award points for effort and clean work.</p>
           </span>
         </button>
+        <button type="button" class="hub-card" data-go="dice" style="--accent:#d4a574">
+          <span class="hub-card__ico">05</span>
+          <span>
+            <h2 class="hub-card__title">Dice Call</h2>
+            <p class="hub-card__desc">Two dice: amber picks the exercise, red picks time or reps — matched so the dose always fits.</p>
+          </span>
+        </button>
       </div>
       <p class="hub__note">Tip: Cast to the gym screen. Keep your phone/tablet as the remote — Space / Enter advances.</p>
     </div>
@@ -52,6 +59,7 @@ export function mountHome(root: HTMLElement): () => void {
     if (go === "caller") navigate({ name: "caller" });
     if (go === "drills") navigate({ name: "drills" });
     if (go === "teams") navigate({ name: "teams" });
+    if (go === "dice") navigate({ name: "dice" });
   };
 
   root.addEventListener("click", onClick);

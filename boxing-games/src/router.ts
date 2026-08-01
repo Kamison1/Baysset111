@@ -4,7 +4,8 @@ export type Route =
   | { name: "session"; templateId: string }
   | { name: "caller" }
   | { name: "drills" }
-  | { name: "teams" };
+  | { name: "teams" }
+  | { name: "dice" };
 
 type Listener = (route: Route) => void;
 const listeners = new Set<Listener>();

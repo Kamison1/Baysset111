@@ -1,6 +1,7 @@
 import "./style.css";
 import { getRoute, onRoute, type Route } from "./router";
 import { mountCaller } from "./views/caller";
+import { mountDice } from "./views/dice";
 import { mountDrills } from "./views/drills";
 import { mountHome } from "./views/home";
 import { mountSession } from "./views/session";
@@ -32,6 +33,9 @@ function render(route: Route) {
       break;
     case "teams":
       unmount = mountTeams(app);
+      break;
+    case "dice":
+      unmount = mountDice(app);
       break;
   }
 }
