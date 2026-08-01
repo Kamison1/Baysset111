@@ -1,4 +1,4 @@
-import { sfxGo, sfxShow, sfxTick, unlockAudio } from "../audio";
+import { sfxDiceClack, sfxDiceLand, sfxGo, sfxTick, unlockAudio } from "../audio";
 import { formatTime } from "../content";
 import { navigate } from "../router";
 
@@ -10,15 +10,9 @@ interface ExerciseFace {
   name: string;
   detail: string;
   mode: DoseMode;
-  /** Index 0 unused; faces 1–6 each map to one dose */
   dosesByFace: Record<Face, number>;
 }
 
-/**
- * Amber die (exercise): face number → fixed exercise.
- * Red die (dose): face number → dose from that exercise’s chart
- * (time exercises use seconds; rep exercises use reps).
- */
 const EXERCISES: Record<Face, ExerciseFace> = {
   1: {
     face: 1,
@@ -82,6 +76,40 @@ function doseChart(ex: ExerciseFace): string {
   return FACES.map((f) => `${f}→${formatDoseShort(ex.mode, ex.dosesByFace[f])}`).join(" · ");
 }
 
+/** Classic 3×3 pip face for a real die look. */
+function dieHTML(kind: "exercise" | "dose", face: Face | null, rolling: boolean): string {
+  const label = kind === "exercise" ? "Amber" : "Red";
+  const sub = kind === "exercise" ? "Exercise" : "Dose";
+  const faceAttr = face ?? 1;
+  const blank = face == null && !rolling;
+  return `
+    <div class="die-wrap">
+      <span class="die-caption">${label} · ${sub}</span>
+      <div
+        class="die die--${kind} ${rolling ? "is-rolling" : ""} ${blank ? "is-blank" : ""} ${face && !rolling ? "is-landed" : ""}"
+        data-die="${kind}"
+        data-face="${faceAttr}"
+        aria-label="${label} die${face ? `, ${face}` : ""}"
+      >
+        <div class="die__face">
+          <div class="die__pips" aria-hidden="true">
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setDieFace(root: HTMLElement, kind: "exercise" | "dose", face: Face) {
+  const el = root.querySelector<HTMLElement>(`[data-die="${kind}"]`);
+  if (!el) return;
+  el.dataset.face = String(face);
+  el.classList.remove("is-blank");
+}
+
 export function mountDice(root: HTMLElement): () => void {
   let rolling = false;
   let exerciseFace: Face | null = null;
@@ -116,7 +144,7 @@ export function mountDice(root: HTMLElement): () => void {
         </div>
         <div class="dice-key__col">
           <p class="dice-key__title" style="color:var(--glove)">Red = Dose face</p>
-          <p class="dice-key__note">Same number 1–6, but the chart changes with the exercise (time vs reps).</p>
+          <p class="dice-key__note">Same pips 1–6, but the chart changes with the exercise (time vs reps).</p>
           ${
             exerciseFace
               ? `<p class="dice-key__active">${EXERCISES[exerciseFace].name} chart:<br/><strong>${doseChart(EXERCISES[exerciseFace])}</strong></p>`
@@ -137,22 +165,13 @@ export function mountDice(root: HTMLElement): () => void {
           <span></span>
         </div>
         <p class="dice-lead">
-          Each die lands on a <strong>number 1–6</strong>.
-          <strong style="color:var(--spark)">Amber number → exercise</strong>.
-          <strong style="color:var(--glove)">Red number → dose</strong> from that exercise’s chart
-          (so planks get seconds, burpees get reps).
+          Real dice faces (pips 1–6).
+          <strong style="color:var(--spark)">Amber → exercise</strong>.
+          <strong style="color:var(--glove)">Red → dose</strong> from that exercise’s chart.
         </p>
-        <div class="dice-stage">
-          <div class="die die--exercise ${rolling ? "is-rolling" : ""}" data-die="exercise">
-            <span class="die__label">Amber</span>
-            <span class="die__num" data-ex-num>${c ? c.exerciseFace : "—"}</span>
-            <span class="die__sub">Exercise</span>
-          </div>
-          <div class="die die--dose ${rolling ? "is-rolling" : ""}" data-die="dose">
-            <span class="die__label">Red</span>
-            <span class="die__num" data-dose-num>${c ? c.doseFace : "—"}</span>
-            <span class="die__sub">Dose</span>
-          </div>
+        <div class="dice-stage ${rolling ? "is-rolling" : ""}">
+          ${dieHTML("exercise", c ? c.exerciseFace : exerciseFace, rolling)}
+          ${dieHTML("dose", c ? c.doseFace : doseFace, rolling)}
         </div>
         ${
           c
@@ -168,7 +187,7 @@ export function mountDice(root: HTMLElement): () => void {
                 <p class="giant-detail">${c.exercise.detail}</p>
               </div>`
             : `<div class="dice-result dice-result--empty">
-                <p class="giant-detail">Roll — then read the numbers to call it out to the class.</p>
+                <p class="giant-detail">Roll — read the pips, then call it to the class.</p>
               </div>`
         }
         ${legendHTML()}
@@ -198,7 +217,7 @@ export function mountDice(root: HTMLElement): () => void {
       const c = current();
       if (!c) return;
       if (c.exercise.mode === "time") startTimer();
-      else sfxGo();
+      else sfxDiceLand();
     });
   }
 
@@ -211,18 +230,19 @@ export function mountDice(root: HTMLElement): () => void {
     doseFace = null;
     paintIdle(false);
 
-    const exNum = root.querySelector("[data-ex-num]");
-    const doseNum = root.querySelector("[data-dose-num]");
-
-    const scrambleMs = 900;
-    const step = 70;
+    const scrambleMs = 1100;
+    const step = 90;
     let t = 0;
-    sfxShow();
+    let clackEvery = 0;
+
     await new Promise<void>((resolve) => {
       const id = setInterval(() => {
         t += step;
-        if (exNum) exNum.textContent = String(rollFace());
-        if (doseNum) doseNum.textContent = String(rollFace());
+        clackEvery += 1;
+        setDieFace(root, "exercise", rollFace());
+        setDieFace(root, "dose", rollFace());
+        // Soft clacks — not every frame, so it doesn't buzz
+        if (clackEvery % 2 === 0) sfxDiceClack();
         if (t >= scrambleMs) {
           clearInterval(id);
           resolve();
@@ -233,7 +253,9 @@ export function mountDice(root: HTMLElement): () => void {
     exerciseFace = rollFace();
     doseFace = rollFace();
     rolling = false;
-    sfxGo();
+    sfxDiceLand();
+    // tiny second settle for the other die
+    setTimeout(() => sfxDiceClack(), 70);
     paintIdle(true);
   }
 
@@ -287,7 +309,7 @@ export function mountDice(root: HTMLElement): () => void {
       if (left <= 3 && left > 0) sfxTick();
       if (left <= 0) {
         clearTimer();
-        sfxGo();
+        sfxDiceLand();
         paintIdle(true);
       }
     }, 1000);
